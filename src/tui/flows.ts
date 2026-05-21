@@ -45,7 +45,7 @@ function select<Value>(api: TuiApi, title: string, options: Array<{ title: strin
 }
 
 async function listModels(api: TuiApi): Promise<ModelRef[]> {
-  const response = await api.client.v2.model.list({ instance: { directory: api.state.path.directory } });
+  const response = await api.client.v2.model.list({ location: { directory: api.state.path.directory } });
   const items = response.data?.items ?? response.data ?? [];
   return items.map((item: any) => ({ providerID: item.providerID ?? item.provider, modelID: item.id ?? item.modelID, name: item.name ?? item.id ?? item.modelID, reasoning: Boolean(item.reasoning) })).filter((item: ModelRef) => item.providerID && item.modelID);
 }

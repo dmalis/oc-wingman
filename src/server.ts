@@ -61,7 +61,7 @@ const plugin: Plugin = async ({ client, directory }) => {
 };
 
 async function listModels(client: any, directory: string): Promise<ModelRef[]> {
-  const response = client.v2?.model?.list ? await client.v2.model.list({ instance: { directory } }) : await client.model?.list?.({ directory });
+  const response = client.v2?.model?.list ? await client.v2.model.list({ location: { directory } }) : await client.model?.list?.({ directory });
   const data = response?.data ?? response;
   const items = Array.isArray(data) ? data : data?.items ?? [];
   return items.map((item: any) => ({ providerID: item.providerID ?? item.provider, modelID: item.id ?? item.modelID, name: item.name ?? item.id ?? item.modelID, reasoning: Boolean(item.reasoning) })).filter((item: ModelRef) => item.providerID && item.modelID);
