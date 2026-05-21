@@ -19,7 +19,7 @@ const plugin: Plugin = async ({ client, directory }) => {
         },
         "wingman:setup": {
           description: "Open Wingman setup in the TUI plugin",
-          template: "Wingman setup is handled by the oc-wingman TUI plugin. If the picker does not open, ensure the ./tui plugin entrypoint is installed and restart OpenCode.",
+          template: "Wingman setup is handled by the oc-wingman TUI command. Open the command palette and choose Wingman Setup, or restart OpenCode if the command is not visible after installing oc-wingman.",
         },
       };
     },
