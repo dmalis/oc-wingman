@@ -61,10 +61,20 @@ const plugin: Plugin = async ({ client, directory }) => {
 };
 
 async function listModels(client: any, directory: string): Promise<ModelRef[]> {
-  const response = client.v2?.model?.list ? await client.v2.model.list({ location: { directory } }) : await client.model?.list?.({ directory });
+  if (client.v2?.model?.list) {
+    const response = await client.v2.model.list({ location: { directory } });
+    const data = response?.data ?? response;
+    const items = Array.isArray(data) ? data : data?.items ?? [];
+    return items.map((item: any) => ({ providerID: item.providerID ?? item.provider, modelID: item.id ?? item.modelID ?? item.apiID, name: item.name ?? item.id ?? item.modelID ?? item.apiID, reasoning: Boolean(item.reasoning) })).filter((item: ModelRef) => item.providerID && item.modelID);
+  }
+  const response = await client.provider?.list?.({ query: { directory } });
   const data = response?.data ?? response;
-  const items = Array.isArray(data) ? data : data?.items ?? [];
-  return items.map((item: any) => ({ providerID: item.providerID ?? item.provider, modelID: item.id ?? item.modelID, name: item.name ?? item.id ?? item.modelID, reasoning: Boolean(item.reasoning) })).filter((item: ModelRef) => item.providerID && item.modelID);
+  const providers = Array.isArray(data) ? data : data?.all ?? [];
+  return providers.flatMap((provider: any) => Object.entries(provider.models ?? {}).map(([key, value]) => {
+    const model = value as Record<string, unknown>;
+    const modelID = typeof model.id === "string" ? model.id : key;
+    return { providerID: provider.id, modelID, name: typeof model.name === "string" ? model.name : modelID, reasoning: Boolean(model.reasoning) };
+  })).filter((item: ModelRef) => item.providerID && item.modelID);
 }
 
 export default plugin;

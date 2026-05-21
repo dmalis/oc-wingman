@@ -45,3 +45,33 @@ test("wingman_review lists v2 models for the current directory", async () => {
   assert.match(String(result), /Wingman status: 1 ok, 0 failed, 0 cancelled/);
   assert.equal(modelListCalls.length, 1);
 });
+
+test("wingman_review falls back to v1 provider models", async () => {
+  const root = await mkdtemp(join(tmpdir(), "oc-wingman-server-"));
+  await mkdir(join(root, ".git"));
+  await mkdir(join(root, ".wingman"));
+  await writeFile(join(root, ".wingman", "config.json"), `${JSON.stringify({
+    version: 1,
+    reviewers: [{ name: "free", provider: "openrouter", model: "z-ai/glm-4.5-air:free" }]
+  }, null, 2)}\n`, "utf8");
+  const providerListCalls: unknown[] = [];
+  const fakeClient = {
+    provider: {
+      list: async (input: unknown) => {
+        providerListCalls.push(input);
+        assert.deepEqual(input, { query: { directory: root } });
+        return { data: { all: [{ id: "openrouter", name: "OpenRouter", models: { "z-ai/glm-4.5-air:free": { id: "z-ai/glm-4.5-air:free", name: "GLM 4.5 Air" } } }] } };
+      }
+    },
+    session: {
+      create: async () => ({ data: { id: "session-1" } }),
+      prompt: async () => ({ data: {} }),
+      messages: async () => ({ data: [{ parts: [{ type: "text", text: "review output" }] }] })
+    }
+  };
+  const hooks = await plugin({ directory: root, worktree: root, project: {} as any, client: fakeClient as any, experimental_workspace: {} as any, serverUrl: new URL("http://localhost"), $: {} as any });
+  const result = await hooks.tool!.wingman_review.execute({ focus: "Review README.md", maxRounds: 1 }, { directory: root, worktree: root, abort: new AbortController().signal } as any);
+
+  assert.match(String(result), /Wingman status: 1 ok, 0 failed, 0 cancelled/);
+  assert.equal(providerListCalls.length, 1);
+});
