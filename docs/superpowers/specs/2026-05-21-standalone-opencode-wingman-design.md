@@ -17,6 +17,7 @@ This spec incorporates these ADRs:
 - `docs/decisions/0005-hybrid-server-tui-plugin.md`: use one package with separate server and TUI entrypoints.
 - `docs/decisions/0006-run-boundary-config-snapshots.md`: reload config at each run boundary and freeze a run snapshot.
 - `docs/decisions/0007-persist-run-artifacts.md`: persist reviewer artifacts independently of optional logging.
+- `docs/decisions/0008-merge-reviewers-by-alias.md`: project reviewer config merges over global reviewers by alias.
 
 ## Scope
 
@@ -138,7 +139,8 @@ Fields:
 Config loading behavior:
 
 - Reload global and project config from disk at every run boundary.
-- Merge project config over global defaults.
+- Merge scalar project config fields over global defaults.
+- Merge reviewer lists by `name` alias: project reviewers replace matching global aliases and append new aliases.
 - Validate before showing preflight or launching reviewers.
 - Freeze the resolved snapshot for the active run.
 - Mid-run config edits affect only later runs.
