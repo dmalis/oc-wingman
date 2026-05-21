@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createRunArtifacts, writeReviewerArtifact, writeRunSummary } from "../src/core/artifacts.ts";
+import { appendAuditLog, createRunArtifacts, writeReviewerArtifact, writeRunSummary } from "../src/core/artifacts.ts";
 import { formatCompactRunResult } from "../src/core/synthesis.ts";
 import type { ResolvedReviewer } from "../src/core/types.ts";
 
@@ -33,4 +33,11 @@ test("writes full reviewer output while compact result remains bounded", async (
   assert.equal(compact.length < longOutput.length, true);
   assert.match(compact, /run-abc/);
   assert.match(compact, /reviewers\/gemini.md/);
+});
+
+test("appendAuditLog writes jsonl only when enabled", async () => {
+  const root = await mkdtemp(join(tmpdir(), "oc-wingman-log-"));
+  await appendAuditLog(root, { version: 1, exclude: "same-provider", defaultReviewers: "all-eligible", maxRounds: 3, maxParallelReviewers: 4, logging: { enabled: true, raw: false }, reviewers: [] }, { runId: "abc" }, new Date("2026-05-21T00:00:00Z"));
+  const text = await readFile(join(root, ".wingman", "logs", "2026-05-21.jsonl"), "utf8");
+  assert.match(text, /"runId":"abc"/);
 });
