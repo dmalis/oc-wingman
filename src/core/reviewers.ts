@@ -1,6 +1,19 @@
 import { WingmanError } from "./errors.ts";
 import type { CurrentModel, ModelRef, ResolvedReviewer, WingmanConfig, WingmanReviewerConfig } from "./types.ts";
 
+const builtInReviewerAliases: Record<string, string[]> = {
+  claude: ["anthropic", "claude"],
+  codex: ["openai", "codex", "gpt"],
+  deepseek: ["deepseek"],
+  gemini: ["google", "gemini"],
+  gpt: ["openai", "gpt"],
+  grok: ["xai", "grok"],
+  openai: ["openai", "gpt", "codex"],
+  opus: ["anthropic", "claude", "opus"],
+  sonnet: ["anthropic", "claude", "sonnet"],
+  xai: ["xai", "grok"],
+};
+
 export function modelKey(provider: string, model: string): string {
   return `${provider}/${model}`;
 }
@@ -50,10 +63,9 @@ export function resolveConfiguredReviewers(config: WingmanConfig, models: ModelR
 }
 
 export function reviewerMatchesHint(reviewer: Pick<WingmanReviewerConfig, "name" | "provider" | "model">, hint: string): boolean {
-  const normalized = hint.trim().toLowerCase();
+  const normalized = normalizeHint(hint);
   if (!normalized) return false;
-  const haystack = `${reviewer.name} ${reviewer.provider} ${reviewer.model} ${reviewer.provider}/${reviewer.model}`.toLowerCase();
-  return haystack.includes(normalized);
+  return reviewerMatchesConfiguredText(reviewer, normalized) || reviewerMatchesBuiltInAlias(reviewer, normalized);
 }
 
 export function selectReviewers(input: { eligible: ResolvedReviewer[]; hint?: string; names?: string[] }): ResolvedReviewer[] {
@@ -65,10 +77,42 @@ export function selectReviewers(input: { eligible: ResolvedReviewer[]; hint?: st
 }
 
 function selectOne(eligible: ResolvedReviewer[], name: string): ResolvedReviewer[] {
-  const matches = eligible.filter((reviewer) => reviewer.name === name || reviewer.key === name || reviewerMatchesHint(reviewer, name));
-  if (matches.length === 0) throw new WingmanError("reviewer.unavailable", `No eligible configured Wingman reviewer matches ${name}.`);
-  if (matches.length > 1) throw new WingmanError("reviewer.ambiguous", `Multiple eligible Wingman reviewers match ${name}: ${matches.map((reviewer) => reviewer.key).join(", ")}.`);
-  return matches;
+  const normalized = normalizeHint(name);
+  const exactMatches = eligible.filter((reviewer) => reviewer.name.toLowerCase() === normalized || reviewer.key.toLowerCase() === normalized);
+  if (exactMatches.length > 0) return requireSingleReviewer(exactMatches, name);
+
+  const configuredTextMatches = eligible.filter((reviewer) => reviewerMatchesConfiguredText(reviewer, normalized));
+  if (configuredTextMatches.length > 0) return requireSingleReviewer(configuredTextMatches, name);
+
+  const aliasMatches = eligible.filter((reviewer) => reviewerMatchesBuiltInAlias(reviewer, normalized));
+  if (aliasMatches.length > 0) return requireSingleReviewer(aliasMatches, name);
+
+  throw new WingmanError("reviewer.unavailable", `No eligible configured Wingman reviewer matches ${name}.`);
+}
+
+function requireSingleReviewer(matches: ResolvedReviewer[], name: string): ResolvedReviewer[] {
+  if (matches.length === 1) return matches;
+  throw new WingmanError("reviewer.ambiguous", `Multiple eligible Wingman reviewers match ${name}: ${matches.map((reviewer) => reviewer.key).join(", ")}.`);
+}
+
+function reviewerMatchesConfiguredText(reviewer: Pick<WingmanReviewerConfig, "name" | "provider" | "model">, normalizedHint: string): boolean {
+  if (!normalizedHint) return false;
+  return reviewerSearchText(reviewer).includes(normalizedHint);
+}
+
+function reviewerMatchesBuiltInAlias(reviewer: Pick<WingmanReviewerConfig, "name" | "provider" | "model">, normalizedHint: string): boolean {
+  const aliases = builtInReviewerAliases[normalizedHint] ?? [];
+  if (aliases.length === 0) return false;
+  const haystack = reviewerSearchText(reviewer);
+  return aliases.some((alias) => haystack.includes(alias));
+}
+
+function reviewerSearchText(reviewer: Pick<WingmanReviewerConfig, "name" | "provider" | "model">): string {
+  return `${reviewer.name} ${reviewer.provider} ${reviewer.model} ${reviewer.provider}/${reviewer.model}`.toLowerCase();
+}
+
+function normalizeHint(hint: string): string {
+  return hint.trim().toLowerCase();
 }
 
 export function dedupeReviewers(reviewers: ResolvedReviewer[]): ResolvedReviewer[] {

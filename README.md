@@ -23,6 +23,21 @@ Restart OpenCode after changing plugin config. OpenCode loads plugin config at s
 - `/wingman:setup`: choose reviewer models and write global or project config.
 - `/wingman`: choose reviewers for one read-only review run.
 
+## Natural Chat
+
+You can also ask for a Wingman review in normal chat:
+
+```text
+audit with gemini
+check this with codex
+run this by claude
+wingman this with all reviewers
+```
+
+Natural phrases route only to configured Wingman reviewers. A phrase like `check this with gemini` works when a configured reviewer matches `gemini` by reviewer name, provider/model text, or the built-in `gemini` alias over configured reviewers. Wingman never invents an unconfigured reviewer from global model availability.
+
+Passive model mentions do not trigger reviews, so text like `Gemini has a large context window` remains normal chat.
+
 ## Config
 
 Global config lives at `~/.config/oc-wingman/config.json`.

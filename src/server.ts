@@ -1,5 +1,6 @@
 import { tool, type Plugin } from "@opencode-ai/plugin";
 import { loadEffectiveConfig } from "./core/config.ts";
+import { buildWingmanRoutingInstruction, parseWingmanChatIntent } from "./core/intent.ts";
 import { inferWingmanContext } from "./core/target.ts";
 import { resolveConfiguredReviewers, selectReviewers } from "./core/reviewers.ts";
 import { runWingmanReview } from "./core/run.ts";
@@ -21,6 +22,15 @@ const plugin: Plugin = async ({ client, directory }) => {
           template: "Wingman setup is handled by the oc-wingman TUI plugin. If the picker does not open, ensure the ./tui plugin entrypoint is installed and restart OpenCode.",
         },
       };
+    },
+    async "chat.message"(input, output) {
+      for (const part of output.parts as Array<{ type?: string; text?: string }>) {
+        if (part.type !== "text" || typeof part.text !== "string") continue;
+        const intent = parseWingmanChatIntent(part.text);
+        if (!intent) continue;
+        part.text = buildWingmanRoutingInstruction(intent, input.model);
+        return;
+      }
     },
     tool: {
       wingman_review: tool({

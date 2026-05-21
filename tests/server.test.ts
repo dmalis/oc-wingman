@@ -75,3 +75,51 @@ test("wingman_review falls back to v1 provider models", async () => {
   assert.match(String(result), /Wingman status: 1 ok, 0 failed, 0 cancelled/);
   assert.equal(providerListCalls.length, 1);
 });
+
+test("chat.message rewrites natural Wingman requests", async () => {
+  const hooks = await plugin({ directory: "/repo", worktree: "/repo", project: {} as any, client: {} as any, experimental_workspace: {} as any, serverUrl: new URL("http://localhost"), $: {} as any });
+  const output = { message: {}, parts: [{ type: "text", text: "run this by claude" }] };
+  const chatMessage = hooks["chat.message"] as ((input: any, output: any) => Promise<void> | void) | undefined;
+
+  assert.ok(chatMessage);
+  await chatMessage({ sessionID: "s", model: { providerID: "openai", modelID: "gpt-5.5" } }, output);
+
+  const text = String(output.parts[0].text);
+  assert.match(text, /Wingman detected a review request/);
+  assert.match(text, /wingman_review/);
+  assert.match(text, /- focus: this/);
+  assert.match(text, /- reviewerHint: claude/);
+  assert.match(text, /- currentProviderID: openai/);
+  assert.match(text, /- currentModelID: gpt-5\.5/);
+});
+
+test("chat.message leaves non-matching chat unchanged", async () => {
+  const hooks = await plugin({ directory: "/repo", worktree: "/repo", project: {} as any, client: {} as any, experimental_workspace: {} as any, serverUrl: new URL("http://localhost"), $: {} as any });
+  const output = { message: {}, parts: [{ type: "text", text: "Gemini has a large context window" }] };
+  const chatMessage = hooks["chat.message"] as ((input: any, output: any) => Promise<void> | void) | undefined;
+
+  assert.ok(chatMessage);
+  await chatMessage({ sessionID: "s" }, output);
+
+  assert.equal(output.parts[0].text, "Gemini has a large context window");
+});
+
+test("chat.message rewrites only the first detected text intent", async () => {
+  const hooks = await plugin({ directory: "/repo", worktree: "/repo", project: {} as any, client: {} as any, experimental_workspace: {} as any, serverUrl: new URL("http://localhost"), $: {} as any });
+  const output = {
+    message: {},
+    parts: [
+      { type: "text", text: "ordinary setup note" },
+      { type: "text", text: "check this with codex" },
+      { type: "text", text: "run this by claude" },
+    ],
+  };
+  const chatMessage = hooks["chat.message"] as ((input: any, output: any) => Promise<void> | void) | undefined;
+
+  assert.ok(chatMessage);
+  await chatMessage({ sessionID: "s" }, output);
+
+  assert.equal(output.parts[0].text, "ordinary setup note");
+  assert.match(output.parts[1].text, /- reviewerHint: codex/);
+  assert.equal(output.parts[2].text, "run this by claude");
+});
