@@ -14,10 +14,16 @@ test("parses natural reviewer-hint review phrases", () => {
 test("parses explicit Wingman requests", () => {
   assert.deepEqual(parseWingmanChatIntent("ask wingman deepseek: review the plan"), { focus: "review the plan", reviewerHint: "deepseek" });
   assert.deepEqual(parseWingmanChatIntent("ask wingman claude review this plan"), { focus: "review this plan", reviewerHint: "claude" });
-  assert.deepEqual(parseWingmanChatIntent("wingman review this plan"), { focus: "review this plan" });
+  assert.deepEqual(parseWingmanChatIntent("ask wingman to review the config changes"), { focus: "review the config changes", allReviewers: true });
+  assert.deepEqual(parseWingmanChatIntent("ask wingman to review this"), { focus: "review this", allReviewers: true });
+  assert.deepEqual(parseWingmanChatIntent("wingman audit this plan"), { focus: "audit this plan", allReviewers: true });
 });
 
 test("parses all-reviewer requests without inventing reviewer names", () => {
+  assert.deepEqual(parseWingmanChatIntent("audit with wingman"), { focus: "audit", allReviewers: true });
+  assert.deepEqual(parseWingmanChatIntent("review this with wingman"), { focus: "review this", allReviewers: true });
+  assert.deepEqual(parseWingmanChatIntent("ask all wingmen"), { focus: "auto", allReviewers: true });
+  assert.deepEqual(parseWingmanChatIntent("run all reviewers on this plan"), { focus: "this plan", allReviewers: true });
   assert.deepEqual(parseWingmanChatIntent("wingman this with all reviewers"), { focus: "this", allReviewers: true });
   assert.deepEqual(parseWingmanChatIntent("ask all reviewers to audit this"), { focus: "audit this", allReviewers: true });
   assert.deepEqual(parseWingmanChatIntent("review this with all reviewers"), { focus: "review this", allReviewers: true });
@@ -34,6 +40,9 @@ test("does not parse passive model mentions or config discussion", () => {
   assert.equal(parseWingmanChatIntent("wingman help me set up codex reviewer"), undefined);
   assert.equal(parseWingmanChatIntent("wingman setup with all reviewers"), undefined);
   assert.equal(parseWingmanChatIntent("wingman how do I configure gemini as a reviewer with all reviewers"), undefined);
+  assert.equal(parseWingmanChatIntent("do not ask wingman about this"), undefined);
+  assert.equal(parseWingmanChatIntent("review without wingman"), undefined);
+  assert.equal(parseWingmanChatIntent("don't ask codex to review this"), undefined);
   assert.equal(parseWingmanChatIntent("what do you think about gemini?"), undefined);
 });
 
@@ -60,6 +69,7 @@ test("builds an all-reviewer routing instruction without reviewer names or hints
   assert.match(text, /all eligible configured reviewers/);
   assert.doesNotMatch(text, /reviewerHint:/);
   assert.doesNotMatch(text, /reviewerNames:/);
+  assert.match(text, /stop and wait/i);
 });
 
 test("builds a no-hint instruction that asks before calling the tool", () => {

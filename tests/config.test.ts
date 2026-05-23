@@ -25,8 +25,9 @@ test("normalizeConfig fills defaults and clamps numeric settings", () => {
   const config = normalizeConfig({ maxRounds: 99, maxParallelReviewers: 0 }, "memory");
   assert.equal(config.version, 1);
   assert.equal(config.exclude, "same-provider");
-  assert.equal(config.maxRounds, 10);
   assert.equal(config.maxParallelReviewers, 1);
+  assert.equal("maxRounds" in config, false);
+  assert.equal("logging" in config, false);
   assert.deepEqual(config.reviewers, []);
 });
 
@@ -57,21 +58,21 @@ test("mergeConfigs replaces reviewer aliases and appends project aliases", () =>
 test("loadEffectiveConfig reloads changed project config on each call", async () => {
   const root = await tempProject();
   const projectPath = projectConfigPath(root);
-  await writeConfig(projectPath, normalizeConfig({ maxRounds: 2 }, projectPath));
-  assert.equal((await loadEffectiveConfig(root, { home: root })).config.maxRounds, 2);
+  await writeConfig(projectPath, normalizeConfig({ maxParallelReviewers: 2 }, projectPath));
+  assert.equal((await loadEffectiveConfig(root, { home: root })).config.maxParallelReviewers, 2);
 
-  await writeConfig(projectPath, normalizeConfig({ maxRounds: 4 }, projectPath));
-  assert.equal((await loadEffectiveConfig(root, { home: root })).config.maxRounds, 4);
+  await writeConfig(projectPath, normalizeConfig({ maxParallelReviewers: 4 }, projectPath));
+  assert.equal((await loadEffectiveConfig(root, { home: root })).config.maxParallelReviewers, 4);
 });
 
 test("loadEffectiveConfig preserves global scalars when project omits them", async () => {
   const root = await tempProject();
   const globalPath = defaultGlobalConfigPath(root);
-  await writeConfig(globalPath, normalizeConfig({ maxRounds: 7, reviewers: [{ name: "global", provider: "google", model: "gemini" }] }, globalPath));
+  await writeConfig(globalPath, normalizeConfig({ maxParallelReviewers: 7, reviewers: [{ name: "global", provider: "google", model: "gemini" }] }, globalPath));
   await mkdir(join(root, WINGMAN_DIR), { recursive: true });
   await writeFile(projectConfigPath(root), `${JSON.stringify({ reviewers: [{ name: "project", provider: "anthropic", model: "claude" }] }, null, 2)}\n`, "utf8");
   const loaded = await loadEffectiveConfig(root, { home: root });
-  assert.equal(loaded.config.maxRounds, 7);
+  assert.equal(loaded.config.maxParallelReviewers, 7);
   assert.deepEqual(loaded.config.reviewers.map((reviewer) => reviewer.name), ["global", "project"]);
 });
 

@@ -25,56 +25,65 @@ export type RunWingmanReviewInput = {
   targetLabel: string;
   reviewers: ResolvedReviewer[];
   maxParallelReviewers: number;
-  maxRounds: number;
   executor: ReviewerExecutor;
   signal?: AbortSignal;
 };
 
 export async function runWingmanReview(input: RunWingmanReviewInput): Promise<WingmanRunResult> {
   const artifacts = await createRunArtifacts(input.cwd);
-  const maxRounds = input.mode === "consensus" ? Math.max(1, input.maxRounds) : 1;
   const rawResults: ReviewerResult[] = [];
-  let completedRounds = 0;
-  for (let round = 1; round <= maxRounds; round += 1) {
-    completedRounds = round;
-    const prompt = buildReviewerPrompt(input.request, input.targetLabel, input.mode, round);
-    const roundResults = await runWithLimit(input.reviewers, Math.max(1, input.maxParallelReviewers), async (reviewer) => {
-      try {
-        if (input.signal?.aborted) throw new DOMException("Run cancelled", "AbortError");
-        const output = await input.executor({ reviewer, prompt, round, signal: input.signal });
-        return await writeReviewerArtifact(artifacts, reviewer, { status: "ok", round, prompt, output: output.output, summary: output.summary });
-      } catch (error) {
-        return await writeReviewerArtifact(artifacts, reviewer, { status: input.signal?.aborted ? "cancelled" : "failed", round, prompt, error: errorMessage(error) });
-      }
-    });
-    rawResults.push(...roundResults);
-    if (input.mode !== "consensus" || consensusReached(roundResults)) break;
-  }
+  const round = 1;
+  const prompt = buildReviewerPrompt(input.request, input.targetLabel);
+  const roundResults = await runWithLimit(input.reviewers, Math.max(1, input.maxParallelReviewers), async (reviewer) => {
+    try {
+      if (input.signal?.aborted) throw new DOMException("Run cancelled", "AbortError");
+      const output = await input.executor({ reviewer, prompt, round, signal: input.signal });
+      return await writeReviewerArtifact(artifacts, reviewer, { status: "ok", round, prompt, output: output.output, summary: output.summary });
+    } catch (error) {
+      return await writeReviewerArtifact(artifacts, reviewer, { status: input.signal?.aborted ? "cancelled" : "failed", round, prompt, error: errorMessage(error) });
+    }
+  });
+  rawResults.push(...roundResults);
   const ok = rawResults.filter((result) => result.status === "ok").length;
   const failed = rawResults.filter((result) => result.status === "failed").length;
   const cancelled = rawResults.filter((result) => result.status === "cancelled").length;
   const text = formatCompactRunResult({ ok, failed, cancelled, artifactDir: artifacts.dir, results: rawResults });
   await writeSynthesisInput(artifacts, buildSynthesisInput(rawResults));
-  await writeRunSummary(artifacts, { runId: artifacts.runId, request: input.request, mode: input.mode, target: input.target, targetLabel: input.targetLabel, rounds: completedRounds, cancelled: cancelled > 0, results: rawResults });
-  return { runId: artifacts.runId, request: input.request, mode: input.mode, target: input.target, targetLabel: input.targetLabel, rounds: completedRounds, cancelled: cancelled > 0, results: rawResults, artifactDir: artifacts.dir, summaryPath: artifacts.summaryPath, synthesisInputPath: artifacts.synthesisInputPath, text };
+  await writeRunSummary(artifacts, { runId: artifacts.runId, request: input.request, mode: input.mode, target: input.target, targetLabel: input.targetLabel, rounds: round, cancelled: cancelled > 0, results: rawResults });
+  return { runId: artifacts.runId, request: input.request, mode: input.mode, target: input.target, targetLabel: input.targetLabel, rounds: round, cancelled: cancelled > 0, results: rawResults, artifactDir: artifacts.dir, summaryPath: artifacts.summaryPath, synthesisInputPath: artifacts.synthesisInputPath, text };
 }
 
-function buildReviewerPrompt(request: string, targetLabel: string, mode: WingmanMode, round: number): string {
+function buildReviewerPrompt(request: string, targetLabel: string): string {
   return [
-    "You are a read-only Wingman reviewer.",
-    "Inspect the provided project context if tools are available, but do not write files, edit files, commit, or run mutating commands.",
-    `Mode: ${mode}`,
+    "# Wingman second-opinion request",
     `Target: ${targetLabel}`,
-    `Round: ${round}`,
-    "Return findings ordered by severity with concrete recommendations.",
     "",
+    "## Instructions",
+    "You are Wingman: an independent second-opinion reviewer for an OpenCode coding session.",
+    "You are not the implementer and not the source of truth.",
+    "Stay read-only. Do not edit files, write files, commit, or run mutating commands.",
+    "Focus on correctness, risks, missed assumptions, alternatives, and whether the proposal is sound.",
+    "If the user's request names a specific angle, weight that angle heavily.",
+    "Be concrete, grounded, and concise.",
+    "",
+    "## Required output format",
+    "Use exactly these sections:",
+    "",
+    "### Verdict",
+    "One sentence: sound / needs attention / unclear, with why.",
+    "",
+    "### What looks right",
+    "Bullets for points you agree with. Use `(none)` if nothing material.",
+    "",
+    "### Concerns or missed assumptions",
+    "Bullets for material risks, gaps, or weak assumptions. Use `(none)` if nothing material.",
+    "",
+    "### Recommended next action",
+    "Bullets with concrete next steps or checks. Keep this short.",
+    "",
+    "## Review focus",
     request,
   ].join("\n");
-}
-
-function consensusReached(results: ReviewerResult[]): boolean {
-  const successful = results.filter((result) => result.status === "ok");
-  return successful.length > 0 && successful.every((result) => /CONSENSUS:\s*yes/i.test(result.output ?? ""));
 }
 
 async function runWithLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {

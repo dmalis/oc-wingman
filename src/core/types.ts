@@ -1,6 +1,6 @@
 export type ExclusionPolicy = "same-provider" | "same-model";
 export type DefaultReviewers = "all-eligible" | "ask";
-export type WingmanMode = "audit" | "adversarial" | "consensus" | "rescue";
+export type WingmanMode = "second-opinion";
 export type ReviewerStatus = "pending" | "running" | "ok" | "failed" | "cancelled";
 export type TargetConfidence = "high" | "medium" | "low";
 
@@ -11,18 +11,11 @@ export type WingmanReviewerConfig = {
   thinking?: string;
 };
 
-export type WingmanLoggingConfig = {
-  enabled: boolean;
-  raw: boolean;
-};
-
 export type WingmanConfig = {
   version: 1;
   exclude: ExclusionPolicy;
   defaultReviewers: DefaultReviewers;
-  maxRounds: number;
   maxParallelReviewers: number;
-  logging: WingmanLoggingConfig;
   reviewers: WingmanReviewerConfig[];
 };
 

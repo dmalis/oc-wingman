@@ -4,24 +4,16 @@ const pathPattern = /(?:^|\s)([\w./-]+\.(?:ts|tsx|js|jsx|json|md|py|go|rs|css|ht
 
 export function inferWingmanContext(input: { cwd: string; request: string; targetHint?: string; sessionText?: string }): WingmanContextPack {
   const request = input.request.trim();
-  const mode = inferMode(request);
   const target = inferTarget(request, input.targetHint, input.sessionText);
   return {
     target,
     label: targetLabel(target),
     focus: request,
-    mode,
+    mode: "second-opinion",
     cwd: input.cwd,
     content: input.sessionText ?? "",
     reason: `Inferred ${target.type} from Wingman request`,
   };
-}
-
-function inferMode(request: string): WingmanMode {
-  if (/\b(consensus|decide|which|choose|trade[-\s]?off)\b/i.test(request)) return "consensus";
-  if (/\b(skeptical|adversarial|red[-\s]?team|do not rubber[-\s]?stamp)\b/i.test(request)) return "adversarial";
-  if (/\b(rescue|stuck|debug)\b/i.test(request)) return "rescue";
-  return "audit";
 }
 
 function inferTarget(request: string, targetHint: string | undefined, sessionText: string | undefined): WingmanTarget {

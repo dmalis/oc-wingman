@@ -1,6 +1,6 @@
-import { mkdir, writeFile, appendFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ResolvedReviewer, ReviewerResult, WingmanConfig } from "./types.ts";
+import type { ResolvedReviewer, ReviewerResult } from "./types.ts";
 
 export type RunArtifacts = {
   runId: string;
@@ -59,11 +59,4 @@ export async function writeRunSummary(artifacts: RunArtifacts, summary: Record<s
 
 export async function writeSynthesisInput(artifacts: RunArtifacts, text: string): Promise<void> {
   await writeFile(artifacts.synthesisInputPath, text.endsWith("\n") ? text : `${text}\n`, "utf8");
-}
-
-export async function appendAuditLog(cwd: string, config: WingmanConfig, entry: Record<string, unknown>, now = new Date()): Promise<void> {
-  if (!config.logging.enabled) return;
-  const dir = join(cwd, ".wingman", "logs");
-  await mkdir(dir, { recursive: true });
-  await appendFile(join(dir, `${now.toISOString().slice(0, 10)}.jsonl`), `${JSON.stringify(entry)}\n`, "utf8");
 }

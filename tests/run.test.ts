@@ -27,12 +27,11 @@ test("runtime honors maxParallelReviewers", async () => {
   const result = await runWingmanReview({
     cwd,
     request: "review",
-    mode: "audit",
+    mode: "second-opinion",
     target: { type: "freeform", focus: "review", confidence: "low" },
     targetLabel: "Freeform",
     reviewers: [reviewer("a"), reviewer("b"), reviewer("c")],
     maxParallelReviewers: 2,
-    maxRounds: 1,
     executor: async ({ reviewer }) => {
       active += 1;
       maxActive = Math.max(maxActive, active);
@@ -50,12 +49,11 @@ test("runtime records partial reviewer failures", async () => {
   const result = await runWingmanReview({
     cwd,
     request: "review",
-    mode: "audit",
+    mode: "second-opinion",
     target: { type: "freeform", focus: "review", confidence: "low" },
     targetLabel: "Freeform",
     reviewers: [reviewer("ok"), reviewer("bad")],
     maxParallelReviewers: 2,
-    maxRounds: 1,
     executor: async ({ reviewer }) => {
       if (reviewer.name === "bad") throw new Error("model failed");
       return { output: "looks fine" };
@@ -65,23 +63,28 @@ test("runtime records partial reviewer failures", async () => {
   assert.match(result.text, /1 ok, 1 failed/);
 });
 
-test("consensus mode runs until maxRounds when consensus is not reached", async () => {
+test("runtime uses one second-opinion round with structured reviewer prompt", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "oc-wingman-run-"));
   const rounds: number[] = [];
+  const prompts: string[] = [];
   const result = await runWingmanReview({
     cwd,
     request: "choose an API",
-    mode: "consensus",
+    mode: "second-opinion",
     target: { type: "question-consensus", question: "choose an API", confidence: "high" },
     targetLabel: "Question consensus",
     reviewers: [reviewer("a")],
     maxParallelReviewers: 1,
-    maxRounds: 3,
-    executor: async ({ round }) => {
+    executor: async ({ round, prompt }) => {
       rounds.push(round);
+      prompts.push(prompt);
       return { output: `round ${round}: no agreement yet` };
     }
   });
-  assert.deepEqual(rounds, [1, 2, 3]);
-  assert.equal(result.rounds, 3);
+  assert.deepEqual(rounds, [1]);
+  assert.equal(result.rounds, 1);
+  assert.match(prompts[0], /Wingman second-opinion request/);
+  assert.match(prompts[0], /Required output format/);
+  assert.doesNotMatch(prompts[0], /Mode:/);
+  assert.match(result.text, /stop and wait/i);
 });

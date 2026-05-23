@@ -25,5 +25,5 @@ export function reviewerSelectOptions(reviewers: ResolvedReviewer[]): PickerOpti
 
 export function formatWingmanPrompt(focus: string, reviewerNames: string[]): string {
   const payload = JSON.stringify({ focus, reviewerNames }, null, 2);
-  return `Use the wingman_review tool with this JSON payload, then synthesize the tool result for the user:\n\n${payload}`;
+  return `Use the wingman_review tool with this JSON payload, then synthesize what you accept, what you reject, and the concrete next action. Stop and wait for user confirmation before modifying files or continuing implementation.\n\n${payload}`;
 }

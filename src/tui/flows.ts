@@ -1,4 +1,4 @@
-import { defaultGlobalConfigPath, loadEffectiveConfig, projectConfigPath, writeConfig } from "../core/config.ts";
+import { defaultGlobalConfigPath, loadEffectiveConfig, projectConfigPath, readConfig, writeConfig } from "../core/config.ts";
 import { resolveConfiguredReviewers } from "../core/reviewers.ts";
 import type { ModelRef } from "../core/types.ts";
 import { formatWingmanPrompt, reviewerSelectOptions, setupScopeOptions } from "./options.ts";
@@ -22,12 +22,12 @@ export async function runSetupPicker(api: TuiApi): Promise<void> {
   const scope = await select(api, "Wingman setup scope", setupScopeOptions());
   if (!scope || scope.value === "cancel") return;
   const models = await listModels(api);
-  const selected = await select(api, "Choose default reviewer model", models.map((model) => ({ title: `${model.name} (${model.providerID}/${model.modelID})`, value: `${model.providerID}/${model.modelID}` })));
+  const selected = await select(api, "Choose default reviewer model", models.map((model) => ({ title: `${model.name} (${model.providerID}/${model.modelID})`, value: model })));
   if (!selected) return;
-  const [provider, model] = selected.value.split("/", 2);
-  const loaded = await loadEffectiveConfig(api.state.path.directory);
-  const config = { ...loaded.config, reviewers: [{ name: provider, provider, model }] };
   const path = scope.value === "global" ? defaultGlobalConfigPath() : projectConfigPath(api.state.path.directory);
+  const existing = await readConfig(path);
+  const reviewer = { name: selected.value.providerID, provider: selected.value.providerID, model: selected.value.modelID };
+  const config = { ...existing, reviewers: [...existing.reviewers.filter((item) => item.name !== reviewer.name), reviewer] };
   await writeConfig(path, config);
   api.ui.toast({ variant: "info", message: `Wingman config saved to ${path}. Restart OpenCode if this plugin entrypoint was newly added.` });
 }

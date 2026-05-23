@@ -28,4 +28,5 @@ test("formatWingmanPrompt encodes selected reviewers", () => {
   assert.match(prompt, /wingman_review/);
   assert.match(prompt, /reviewerNames/);
   assert.match(prompt, /gemini/);
+  assert.match(prompt, /stop and wait/i);
 });

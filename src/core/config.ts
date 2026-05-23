@@ -13,9 +13,7 @@ export const defaultWingmanConfig: WingmanConfig = {
   version: 1,
   exclude: "same-provider",
   defaultReviewers: "all-eligible",
-  maxRounds: 3,
   maxParallelReviewers: 4,
-  logging: { enabled: false, raw: false },
   reviewers: [],
 };
 
@@ -58,7 +56,6 @@ function validateUniqueAliases(reviewers: WingmanReviewerConfig[], source: strin
 
 export function normalizeConfig(raw: unknown, source: string): WingmanConfig {
   const obj = asObject(raw) ?? {};
-  const logging = asObject(obj.logging) ?? {};
   const reviewers = Array.isArray(obj.reviewers)
     ? obj.reviewers.map((item, index) => normalizeReviewer(item, index, source)).filter((item): item is WingmanReviewerConfig => Boolean(item))
     : [];
@@ -69,9 +66,7 @@ export function normalizeConfig(raw: unknown, source: string): WingmanConfig {
     version: 1,
     exclude,
     defaultReviewers,
-    maxRounds: numberValue(obj.maxRounds, defaultWingmanConfig.maxRounds, 1, 10),
     maxParallelReviewers: numberValue(obj.maxParallelReviewers, defaultWingmanConfig.maxParallelReviewers, 1, 16),
-    logging: { enabled: Boolean(logging.enabled), raw: Boolean(logging.raw) },
     reviewers,
   };
 }
@@ -80,10 +75,10 @@ type ConfigField = keyof WingmanConfig;
 
 function configFields(raw: unknown): Set<ConfigField> {
   const obj = asObject(raw) ?? {};
-  return new Set(Object.keys(obj).filter((key): key is ConfigField => ["version", "exclude", "defaultReviewers", "maxRounds", "maxParallelReviewers", "logging", "reviewers"].includes(key)));
+  return new Set(Object.keys(obj).filter((key): key is ConfigField => ["version", "exclude", "defaultReviewers", "maxParallelReviewers", "reviewers"].includes(key)));
 }
 
-export function mergeConfigs(globalConfig: WingmanConfig, projectConfig: WingmanConfig, projectFields: Set<ConfigField> = new Set(["exclude", "defaultReviewers", "maxRounds", "maxParallelReviewers", "logging", "reviewers"] as ConfigField[])): WingmanConfig {
+export function mergeConfigs(globalConfig: WingmanConfig, projectConfig: WingmanConfig, projectFields: Set<ConfigField> = new Set(["exclude", "defaultReviewers", "maxParallelReviewers", "reviewers"] as ConfigField[])): WingmanConfig {
   const mergedReviewers = new Map<string, WingmanReviewerConfig>();
   for (const reviewer of globalConfig.reviewers) mergedReviewers.set(reviewer.name, reviewer);
   if (projectFields.has("reviewers")) for (const reviewer of projectConfig.reviewers) mergedReviewers.set(reviewer.name, reviewer);
@@ -91,9 +86,7 @@ export function mergeConfigs(globalConfig: WingmanConfig, projectConfig: Wingman
     version: 1,
     exclude: projectFields.has("exclude") ? projectConfig.exclude : globalConfig.exclude,
     defaultReviewers: projectFields.has("defaultReviewers") ? projectConfig.defaultReviewers : globalConfig.defaultReviewers,
-    maxRounds: projectFields.has("maxRounds") ? projectConfig.maxRounds : globalConfig.maxRounds,
     maxParallelReviewers: projectFields.has("maxParallelReviewers") ? projectConfig.maxParallelReviewers : globalConfig.maxParallelReviewers,
-    logging: projectFields.has("logging") ? { ...globalConfig.logging, ...projectConfig.logging } : { ...globalConfig.logging },
     reviewers: Array.from(mergedReviewers.values()),
   };
 }
@@ -127,6 +120,11 @@ async function readConfigFile(path: string): Promise<{ config: WingmanConfig; fi
   }
 }
 
+export async function readConfig(path: string): Promise<WingmanConfig> {
+  const loaded = await readConfigFile(path);
+  return loaded?.config ?? { ...defaultWingmanConfig, reviewers: [] };
+}
+
 export async function loadEffectiveConfig(cwd: string, options: { home?: string; globalPath?: string; projectPath?: string } = {}) {
   const globalPath = options.globalPath ?? defaultGlobalConfigPath(options.home);
   const projectPath = options.projectPath ?? projectConfigPath(cwd);
@@ -135,7 +133,7 @@ export async function loadEffectiveConfig(cwd: string, options: { home?: string;
   const globalConfig = loadedGlobal?.config ?? defaultWingmanConfig;
   const config = loadedProject
     ? mergeConfigs(globalConfig, loadedProject.config, loadedProject.fields)
-    : { ...globalConfig, logging: { ...globalConfig.logging }, reviewers: [...globalConfig.reviewers] };
+    : { ...globalConfig, reviewers: [...globalConfig.reviewers] };
   return { config, globalPath, projectPath, sources: { global: Boolean(loadedGlobal), project: Boolean(loadedProject) } };
 }
 

@@ -26,6 +26,63 @@ test("executor creates read-only session and extracts assistant text", async () 
   const fakeClient = {
     session: {
       create: async (args: any) => { calls.push(`create:${args.body.title}`); return { data: { id: "session-1" } }; },
+      prompt: async (args: any) => ({ data: { info: { role: "assistant" }, parts: [{ type: "text", text: "assistant review" }] } }),
+      messages: async () => ({ data: [{ info: { role: "user" }, parts: [{ type: "text", text: "review" }] }] })
+    }
+  };
+  const executor = createOpenCodeReviewerExecutor({ client: fakeClient as any, directory: "/repo" });
+  const output = await executor({ reviewer, prompt: "review", round: 1 });
+
+  assert.equal(output.output, "assistant review");
+});
+
+test("executor does not treat metadata-less prompt echo as assistant output", async () => {
+  const fakeClient = {
+    session: {
+      create: async () => ({ data: { id: "session-1" } }),
+      prompt: async () => ({ data: { parts: [{ type: "text", text: "review" }] } }),
+      messages: async () => ({ data: [{ info: { role: "assistant" }, parts: [{ type: "text", text: "real review" }] }] })
+    }
+  };
+  const executor = createOpenCodeReviewerExecutor({ client: fakeClient as any, directory: "/repo" });
+  const output = await executor({ reviewer, prompt: "review", round: 1 });
+
+  assert.equal(output.output, "real review");
+});
+
+test("executor ignores user-role prompt echoes in message fallback", async () => {
+  const fakeClient = {
+    session: {
+      create: async () => ({ data: { id: "session-1" } }),
+      prompt: async () => ({ data: { parts: [{ type: "text", text: "review" }] } }),
+      messages: async () => ({ data: [{ info: { role: "user" }, parts: [{ type: "text", text: "review" }] }] })
+    }
+  };
+  const executor = createOpenCodeReviewerExecutor({ client: fakeClient as any, directory: "/repo" });
+  const output = await executor({ reviewer, prompt: "review", round: 1 });
+
+  assert.equal(output.output, "");
+});
+
+test("executor ignores user-role prompt echoes with model metadata", async () => {
+  const fakeClient = {
+    session: {
+      create: async () => ({ data: { id: "session-1" } }),
+      prompt: async () => ({ data: { parts: [{ type: "text", text: "review" }] } }),
+      messages: async () => ({ data: [{ info: { role: "user", providerID: "google", modelID: "gemini" }, parts: [{ type: "text", text: "different prompt wording" }] }] })
+    }
+  };
+  const executor = createOpenCodeReviewerExecutor({ client: fakeClient as any, directory: "/repo" });
+  const output = await executor({ reviewer, prompt: "review", round: 1 });
+
+  assert.equal(output.output, "");
+});
+
+test("executor falls back to assistant messages when prompt returns no text", async () => {
+  const calls: string[] = [];
+  const fakeClient = {
+    session: {
+      create: async (args: any) => { calls.push(`create:${args.body.title}`); return { data: { id: "session-1" } }; },
       prompt: async (args: any) => { calls.push(`prompt:${args.path.id}:${args.body.model.providerID}/${args.body.model.modelID}:${args.body.tools.bash}`); return { data: {} }; },
       messages: async () => ({ data: [{ parts: [{ type: "text", text: "review output" }] }] })
     }

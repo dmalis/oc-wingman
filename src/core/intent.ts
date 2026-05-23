@@ -14,6 +14,7 @@ const knownReviewerHints = new Set([
   "gemini",
   "gpt",
   "grok",
+  "haiku",
   "openai",
   "opus",
   "sonnet",
@@ -21,12 +22,14 @@ const knownReviewerHints = new Set([
 ]);
 
 const reviewerToken = "([a-z0-9][a-z0-9._:/-]*)";
-const reviewStartPattern = /^(?:audit|check|review|inspect|critique|look\s+at|take\s+a\s+look|second\s+opinion)\b/i;
-const configDiscussionPattern = /\b(?:config|configuration|configure|setup|set\s+up|install|plugin)\b/i;
+const reviewVerbPattern = "(?:audit|check|review|inspect|critique|sanity[-\\s]+check|look\\s+at|take\\s+a\\s+look)";
+const reviewStartPattern = new RegExp(`^${reviewVerbPattern}\\b`, "i");
+const configDiscussionPattern = /\b(?:config|configuration|configure|setup|set\s+up|install|help|plugin)\b/i;
 
 export function parseWingmanChatIntent(text: string): WingmanChatIntent | undefined {
   const input = cleanFocus(text);
   if (!input) return undefined;
+  if (hasNegatedWingmanRequest(input)) return undefined;
 
   return parseAllReviewerIntent(input) ?? parseExplicitWingmanIntent(input) ?? parseReviewerHintIntent(input);
 }
@@ -41,7 +44,7 @@ export function buildWingmanRoutingInstruction(intent: WingmanChatIntent, curren
     lines.push("No reviewer hint was provided. Ask the user which configured eligible reviewers to use before calling wingman_review.");
     lines.push("Do not call wingman_review until the user chooses reviewers.");
     lines.push("Only resolve reviewer hints against configured Wingman reviewers. Do not guess unconfigured models. If no configured reviewer matches, ask the user to configure or choose reviewers.");
-    lines.push("After the tool returns, synthesize what to keep, what to dismiss, and concrete next actions. Do not dump raw reviewer output.");
+    lines.push("After the tool returns, synthesize what you accept, what you reject, and the concrete next action. Do not dump raw reviewer output. Then stop and wait for user confirmation before modifying files or continuing implementation.");
     return lines.join("\n");
   }
 
@@ -64,26 +67,44 @@ export function buildWingmanRoutingInstruction(intent: WingmanChatIntent, curren
   }
 
   lines.push("Only resolve reviewer hints against configured Wingman reviewers. Do not guess unconfigured models. If no configured reviewer matches, ask the user to configure or choose reviewers.");
-  lines.push("After the tool returns, synthesize what to keep, what to dismiss, and concrete next actions. Do not dump raw reviewer output.");
+  lines.push("After the tool returns, synthesize what you accept, what you reject, and the concrete next action. Do not dump raw reviewer output. Then stop and wait for user confirmation before modifying files or continuing implementation.");
   return lines.join("\n");
 }
 
 function parseAllReviewerIntent(input: string): WingmanChatIntent | undefined {
-  const wingmanAll = input.match(/^(?:(?:ask|use)\s+wingman|wingman)\s+(.+?)\s+(?:with|using)\s+all(?:\s+eligible)?\s+reviewers?\.?$/i);
+  if (/^ask\s+all(?:\s+eligible)?\s+(?:wingmen|reviewers?)$/i.test(input)) return { focus: "auto", allReviewers: true };
+  if (/^(?:run|use)\s+all(?:\s+eligible)?\s+(?:wingmen|reviewers?)$/i.test(input)) return { focus: "auto", allReviewers: true };
+
+  const runAll = input.match(/^(?:run|use)\s+all(?:\s+eligible)?\s+(?:wingmen|reviewers?)(?:\s+(?:on|for|to))?\s+(.+)$/i);
+  if (runAll?.[1]) {
+    const focus = cleanFocus(runAll[1]);
+    if (isConfigDiscussion(focus)) return undefined;
+    return { focus, allReviewers: true };
+  }
+
+  const withWingman = input.match(new RegExp(`^(${reviewVerbPattern})\\b(?:\\s+(.+?))?\\s+(?:with|using|via)\\s+wingman\\.?$`, "i"));
+  if (withWingman?.[1]) {
+    const target = withWingman[2] ? ` ${cleanFocus(withWingman[2])}` : "";
+    const focus = cleanFocus(`${withWingman[1].toLowerCase()}${target}`);
+    if (isConfigDiscussion(focus)) return undefined;
+    return { focus, allReviewers: true };
+  }
+
+  const wingmanAll = input.match(/^(?:(?:ask|use)\s+wingman(?:\s+to)?|wingman)\s+(.+?)\s+(?:with|using|via)\s+all(?:\s+eligible)?\s+(?:wingmen|reviewers?)\.?$/i);
   if (wingmanAll?.[1]) {
     const focus = cleanFocus(wingmanAll[1]);
     if (isConfigDiscussion(focus)) return undefined;
     return { focus, allReviewers: true };
   }
 
-  const askAll = input.match(/^ask\s+all(?:\s+eligible)?\s+reviewers?\s+to\s+(.+?)\.?$/i);
+  const askAll = input.match(/^ask\s+all(?:\s+eligible)?\s+(?:wingmen|reviewers?)\s+to\s+(.+?)\.?$/i);
   if (askAll?.[1]) {
     const focus = cleanFocus(askAll[1]);
     if (isConfigDiscussion(focus)) return undefined;
     return { focus, allReviewers: true };
   }
 
-  const reviewAll = input.match(/^(audit|check|review|inspect|critique)\b(?:\s+(.+?))?\s+(?:with|using)\s+all(?:\s+eligible)?\s+reviewers?\.?$/i);
+  const reviewAll = input.match(new RegExp(`^(${reviewVerbPattern})\\b(?:\\s+(.+?))?\\s+(?:with|using|via)\\s+all(?:\\s+eligible)?\\s+(?:wingmen|reviewers?)\\.?$`, "i"));
   if (reviewAll?.[1]) {
     const target = reviewAll[2] ? ` ${cleanFocus(reviewAll[2])}` : "";
     const focus = cleanFocus(`${reviewAll[1].toLowerCase()}${target}`);
@@ -95,9 +116,10 @@ function parseAllReviewerIntent(input: string): WingmanChatIntent | undefined {
 }
 
 function parseExplicitWingmanIntent(input: string): WingmanChatIntent | undefined {
-  const match = input.match(/^(?:(?:ask|use)\s+wingman|wingman)\b\s*:?\s*-?\s*(.+?)\.?$/i);
-  const rawFocus = match?.[1] ? cleanFocus(match[1]) : "";
+  const match = input.match(/^(?:(?:ask|use)\s+wingman(?:\s+to)?|wingman)\b\s*:?\s*-?\s*(.+?)\.?$/i);
+  let rawFocus = match?.[1] ? cleanFocus(match[1]) : "";
   if (!rawFocus) return undefined;
+  rawFocus = cleanFocus(rawFocus.replace(/^to\s+/i, ""));
 
   const colonHint = rawFocus.match(new RegExp(`^${reviewerToken}\\s*:\\s*(.+)$`, "i"));
   if (colonHint?.[1] && colonHint[2]) {
@@ -114,11 +136,11 @@ function parseExplicitWingmanIntent(input: string): WingmanChatIntent | undefine
   }
 
   if (isConfigDiscussion(rawFocus)) return undefined;
-  return { focus: rawFocus };
+  return { focus: rawFocus, allReviewers: true };
 }
 
 function parseReviewerHintIntent(input: string): WingmanChatIntent | undefined {
-  const withReviewer = input.match(new RegExp(`^(audit|check|review|inspect|critique)\\b(?:\\s+(.+?))?\\s+(?:with|using|via)\\s+${reviewerToken}\\.?$`, "i"));
+  const withReviewer = input.match(new RegExp(`^(${reviewVerbPattern})\\b(?:\\s+(.+?))?\\s+(?:with|using|via)\\s+${reviewerToken}\\.?$`, "i"));
   if (withReviewer?.[1] && withReviewer[3]) {
     const target = withReviewer[2] ? ` ${cleanFocus(withReviewer[2])}` : "";
     return { focus: cleanFocus(`${withReviewer[1].toLowerCase()}${target}`), reviewerHint: cleanHint(withReviewer[3]) };
@@ -148,6 +170,12 @@ function cleanFocus(value: string): string {
 
 function isConfigDiscussion(value: string): boolean {
   return configDiscussionPattern.test(value) && !reviewStartPattern.test(value);
+}
+
+function hasNegatedWingmanRequest(value: string): boolean {
+  return /\b(?:do\s+not|don't|dont|never)\s+(?:ask|use|run|call)\b.{0,80}\b(?:wingman|reviewers?|codex|gemini|claude)\b/i.test(value)
+    || /\b(?:review|audit|check|inspect|critique)\b.{0,40}\bwithout\s+wingman\b/i.test(value)
+    || /\bwithout\s+wingman\b.{0,40}\b(?:review|audit|check|inspect|critique)\b/i.test(value);
 }
 
 function cleanHint(value: string): string {

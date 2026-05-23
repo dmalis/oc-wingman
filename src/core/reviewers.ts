@@ -70,10 +70,15 @@ export function reviewerMatchesHint(reviewer: Pick<WingmanReviewerConfig, "name"
 
 export function selectReviewers(input: { eligible: ResolvedReviewer[]; hint?: string; names?: string[] }): ResolvedReviewer[] {
   const names = input.names?.map((name) => name.trim()).filter(Boolean) ?? [];
+  if (names.some(isAllReviewersName)) return input.eligible;
   if (names.length > 0) return dedupeReviewers(names.flatMap((name) => selectOne(input.eligible, name)));
   const hint = input.hint?.trim();
   if (hint) return selectOne(input.eligible, hint);
   return input.eligible;
+}
+
+function isAllReviewersName(name: string): boolean {
+  return /^(?:all|all\s+reviewers?|all\s+eligible\s+reviewers?|all\s+wingmen|all\s+eligible\s+wingmen|reviewers?|wingmen)$/.test(normalizeHint(name));
 }
 
 function selectOne(eligible: ResolvedReviewer[], name: string): ResolvedReviewer[] {

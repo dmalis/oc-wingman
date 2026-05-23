@@ -37,6 +37,8 @@ test("same-model policy allows same provider but never exact same model", () => 
 
 test("selectReviewers handles aliases and ambiguous hints", () => {
   const reviewers = resolveConfiguredReviewers(config("same-model"), models, { providerID: "openai", modelID: "gpt-5.5" });
+  assert.deepEqual(selectReviewers({ eligible: reviewers, names: ["all"] }).map((reviewer) => reviewer.name), reviewers.map((reviewer) => reviewer.name));
+  assert.deepEqual(selectReviewers({ eligible: reviewers, names: ["all reviewers"] }).map((reviewer) => reviewer.name), reviewers.map((reviewer) => reviewer.name));
   assert.deepEqual(selectReviewers({ eligible: reviewers, names: ["claude"] }).map((reviewer) => reviewer.name), ["claude"]);
   assert.equal(reviewerMatchesHint(reviewers[0], "gemini"), true);
   assert.deepEqual(selectReviewers({ eligible: reviewers, names: ["gemini"] }).map((reviewer) => reviewer.name), ["gemini"]);

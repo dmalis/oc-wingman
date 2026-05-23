@@ -21,7 +21,7 @@ export function createOpenCodeReviewerExecutor(input: { client: any; directory: 
       body: { title: `Wingman ${reviewer.name}` },
     });
     const sessionID = data(session).id;
-    await input.client.session.prompt({
+    const prompted = await input.client.session.prompt({
       path: { id: sessionID },
       query: query(input),
       body: {
@@ -32,8 +32,11 @@ export function createOpenCodeReviewerExecutor(input: { client: any; directory: 
       },
     });
     if (input.client.session.wait) await input.client.session.wait({ path: { id: sessionID }, query: query(input) });
+    const promptedData = data(prompted);
+    const promptOutput = isAssistantResponse(promptedData) ? extractText(promptedData, prompt) : "";
+    if (promptOutput) return { output: promptOutput };
     const messages = await input.client.session.messages({ path: { id: sessionID }, query: { ...query(input), limit: 20 } });
-    return { output: extractText(data(messages)) };
+    return { output: extractText(data(messages), prompt) };
   };
 }
 
@@ -45,12 +48,25 @@ function data(value: any): any {
   return value?.data ?? value;
 }
 
-function extractText(messages: any): string {
-  const list = Array.isArray(messages) ? messages : messages?.items ?? [];
-  for (const message of [...list].reverse()) {
+function extractText(messages: any, prompt?: string): string {
+  const list = Array.isArray(messages) ? messages : messages?.items ?? (messages?.parts ? [messages] : []);
+  const assistantMessages = list.filter(isAssistantResponse);
+  const fallbackMessages = list.filter((message: any) => !isUserResponse(message));
+  const promptText = prompt?.trim();
+  for (const message of [...(assistantMessages.length ? assistantMessages : fallbackMessages)].reverse()) {
     const parts = Array.isArray(message.parts) ? message.parts : [];
     const text = parts.map((part: any) => part.text ?? part.content ?? "").filter(Boolean).join("\n").trim();
+    if (promptText && text === promptText) continue;
     if (text) return text;
   }
   return "";
+}
+
+function isAssistantResponse(value: any): boolean {
+  if (isUserResponse(value)) return false;
+  return Boolean(value?.info?.role === "assistant" || value?.info?.providerID || value?.info?.modelID || value?.role === "assistant" || value?.providerID || value?.modelID);
+}
+
+function isUserResponse(value: any): boolean {
+  return value?.info?.role === "user" || value?.role === "user";
 }

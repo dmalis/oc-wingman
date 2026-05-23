@@ -21,7 +21,7 @@ export function formatCompactRunResult(input: { ok: number; failed: number; canc
       boundedExcerpt(result.output ?? result.error, maxExcerptChars),
       "",
     ]),
-    "Main agent: start your response with a compact Wingman status block, then synthesize reviewer opinions. State what to keep, what to dismiss, and concrete next actions. Do not dump raw reviewer output.",
+    "Main agent: start your response with a compact Wingman status block, then synthesize reviewer opinions. State what you accept, what you reject, and the concrete next action. Do not dump raw reviewer output. Then stop and wait for user confirmation before modifying files or continuing implementation.",
   ];
   return lines.join("\n").trimEnd();
 }
